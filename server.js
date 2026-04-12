@@ -31,9 +31,9 @@ httpServer.listen(PORT, '0.0.0.0', () => {
     list.forEach(i => { if (i.family === 'IPv4' && !i.internal) ips.push(i.address); })
   );
 
-  console.log('\n\u{1F3AE} ECHO Game Server ready!');
+  console.log('\n🎮 ECHO Game Server ready!');
   console.log(`   Local  -> http://localhost:${PORT}`);
   ips.forEach(ip => console.log(`   LAN    -> http://${ip}:${PORT}  (share this with your friends)`));
-  console.log('\n\u{1F4F1} Players on the same Wi-Fi can open the LAN address in their browser.');
+  console.log('\n📱 Players on the same Wi-Fi can open the LAN address in their browser.');
   console.log('   No internet required – the PeerJS signaling server is built in.\n');
 });

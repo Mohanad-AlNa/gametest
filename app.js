@@ -553,7 +553,7 @@ function hostHandleMessage(conn, rawMsg) {
 }
 
 // ─── PeerJS setup: Host ───────────────────────────────────────────────────────
-function createHostPeer(code) {
+function createHostPeer(code, retries = 0) {
   if (peer) peer.destroy();
 
   const peerId = PEER_PREFIX + code;
@@ -595,9 +595,14 @@ function createHostPeer(code) {
 
   peer.on('error', err => {
     if (err.type === 'unavailable-id') {
-      // Peer ID collision – try a fresh code
+      // Peer ID collision – try a fresh code (max 5 attempts)
       peer.destroy();
-      createHostPeer(randomCode());
+      if (retries < 5) {
+        createHostPeer(randomCode(), retries + 1);
+      } else {
+        showToast('تعذّر إنشاء الغرفة. حاول مجدداً.', 'error');
+        showScreen('s-home');
+      }
     } else {
       showToast('خطأ في الاتصال: ' + err.message, 'error');
     }
