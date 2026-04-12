@@ -9,7 +9,7 @@ const app        = express();
 const httpServer = createServer(app);
 const io         = new Server(httpServer, { cors: { origin: '*' } });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS  = 8;
