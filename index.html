@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ECHO – لعبة المزامنة الذهنية</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN: Home
+  ══════════════════════════════════════════════════════════ -->
+  <div id="s-home" class="screen active">
+    <div class="home-wrap">
+
+      <div class="logo-area">
+        <div class="logo-rings">
+          <span class="ring r1"></span>
+          <span class="ring r2"></span>
+          <span class="ring r3"></span>
+          <span class="logo-letter">E</span>
+        </div>
+        <h1 class="logo-title">ECHO</h1>
+        <p class="logo-ar">لعبة المزامنة الذهنية</p>
+        <p class="logo-sub">هل تستطيع التفكير مثل أصدقائك؟</p>
+      </div>
+
+      <div class="card">
+        <div class="input-group">
+          <label for="inp-name">اسمك في اللعبة</label>
+          <input id="inp-name" type="text" placeholder="أدخل اسمك…" maxlength="15" autocomplete="off" />
+        </div>
+        <div class="row-btns">
+          <button class="btn btn-primary" id="btn-create">🏠 إنشاء غرفة</button>
+          <button class="btn btn-outline" id="btn-join-show">🚪 الانضمام</button>
+        </div>
+      </div>
+
+      <div class="rules-card">
+        <h3>🎮 كيف تلعب؟</h3>
+        <div class="rules-grid">
+          <div class="rule"><span class="rule-icon">📢</span><p>فئة واحدة تظهر للجميع معاً</p></div>
+          <div class="rule"><span class="rule-icon">✍️</span><p>كل لاعب يكتب كلمة واحدة سراً</p></div>
+          <div class="rule"><span class="rule-icon">🔍</span><p>الإجابات تُكشف دفعة واحدة</p></div>
+          <div class="rule"><span class="rule-icon">⚡</span><p>كلما تطابقت إجاباتكم، نقاط أكثر!</p></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       MODAL: Join
+  ══════════════════════════════════════════════════════════ -->
+  <div id="modal-join" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3>الانضمام لغرفة</h3>
+      <div class="input-group">
+        <label for="inp-code">كود الغرفة (4 أحرف)</label>
+        <input id="inp-code" type="text" placeholder="مثال: AB3K" maxlength="4" class="code-input" autocomplete="off" />
+      </div>
+      <div class="row-btns">
+        <button class="btn btn-primary" id="btn-join-confirm">انضمام</button>
+        <button class="btn btn-ghost"   id="btn-join-cancel">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN: Lobby
+  ══════════════════════════════════════════════════════════ -->
+  <div id="s-lobby" class="screen">
+    <div class="section-wrap">
+
+      <div class="lobby-header">
+        <h2>غرفة الانتظار</h2>
+        <div class="code-display">
+          <span class="code-label">كود الغرفة</span>
+          <span id="lbl-code" class="code-value">----</span>
+          <button class="btn-icon" id="btn-copy" title="نسخ الكود">📋</button>
+        </div>
+      </div>
+
+      <div id="players-list" class="players-list"></div>
+
+      <div id="lobby-host-area" class="lobby-footer hidden">
+        <p class="hint-text">أنت المضيف — انتظر حتى ينضم الجميع ثم ابدأ</p>
+        <button class="btn btn-primary btn-xl" id="btn-start" disabled>▶ ابدأ اللعبة</button>
+      </div>
+      <div id="lobby-guest-area" class="lobby-footer">
+        <p class="pulse-text">⏳ انتظار المضيف لبدء اللعبة…</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN: Playing
+  ══════════════════════════════════════════════════════════ -->
+  <div id="s-playing" class="screen">
+    <div class="section-wrap">
+
+      <div class="play-header">
+        <span id="lbl-round">الجولة 1 / 8</span>
+        <span id="lbl-tscore" class="tscore-badge">0 نقطة</span>
+      </div>
+
+      <div class="category-card">
+        <div class="cat-pill">الفئة</div>
+        <h2 id="lbl-cat-ar" class="cat-ar"></h2>
+        <p  id="lbl-cat-en" class="cat-en"></p>
+      </div>
+
+      <div class="timer-wrap">
+        <svg class="timer-svg" viewBox="0 0 120 120">
+          <defs>
+            <linearGradient id="timerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%"   stop-color="#7c3aed"/>
+              <stop offset="100%" stop-color="#06b6d4"/>
+            </linearGradient>
+          </defs>
+          <circle class="t-bg"   cx="60" cy="60" r="52"/>
+          <circle class="t-ring" cx="60" cy="60" r="52"
+            id="t-ring"
+            stroke-dasharray="326.73"
+            stroke-dashoffset="0"
+            transform="rotate(-90 60 60)"/>
+        </svg>
+        <div id="lbl-timer" class="timer-num">30</div>
+      </div>
+
+      <div id="answer-area" class="answer-area">
+        <input id="inp-answer" type="text" placeholder="اكتب إجابتك هنا…" maxlength="25" autocomplete="off" />
+        <button class="btn btn-primary" id="btn-submit">إرسال ✓</button>
+      </div>
+
+      <div id="answered-msg" class="answered-msg hidden">
+        ✅ تم إرسال إجابتك! انتظر الآخرين…
+      </div>
+
+      <div class="progress-area">
+        <div class="prog-track"><div id="prog-bar" class="prog-bar" style="width:0%"></div></div>
+        <p id="prog-text" class="prog-text">0 من 0 لاعب أجاب</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN: Reveal
+  ══════════════════════════════════════════════════════════ -->
+  <div id="s-reveal" class="screen">
+    <div class="section-wrap">
+
+      <div id="sync-banner" class="sync-banner"></div>
+
+      <div class="reveal-meta">
+        <span id="rev-cat" class="rev-cat-label"></span>
+        <span id="rev-round-score" class="rev-round-score"></span>
+      </div>
+
+      <div id="answers-board" class="answers-board"></div>
+
+      <div id="matches-section" class="matches-section"></div>
+
+      <div class="team-score-card">
+        <div class="ts-label">نقاط الفريق الكلية</div>
+        <div id="ts-value" class="ts-value">0</div>
+        <div class="ts-sub">من أصل 400 نقطة ممكنة</div>
+      </div>
+
+      <div id="rev-host-ctrl" class="ctrl-area hidden">
+        <button class="btn btn-primary btn-xl" id="btn-next">الجولة التالية ▶</button>
+      </div>
+      <div id="rev-guest-ctrl" class="ctrl-area">
+        <p class="pulse-text">⏳ انتظار المضيف للجولة التالية…</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCREEN: Game Over
+  ══════════════════════════════════════════════════════════ -->
+  <div id="s-gameover" class="screen">
+    <div class="section-wrap">
+
+      <div id="result-banner" class="result-banner"></div>
+
+      <div class="final-score-card">
+        <div class="fs-label">نقاط الفريق النهائية</div>
+        <div id="fs-value" class="fs-value">0</div>
+        <div class="fs-track"><div id="fs-fill" class="fs-fill" style="width:0%"></div></div>
+        <div id="fs-caption" class="fs-caption"></div>
+      </div>
+
+      <h3 class="lb-heading">🏅 لوحة الشرف الفردية</h3>
+      <div id="leaderboard" class="leaderboard"></div>
+
+      <div id="go-host-ctrl" class="ctrl-area hidden">
+        <button class="btn btn-primary btn-xl" id="btn-again">🔄 العب مجدداً</button>
+      </div>
+      <div id="go-guest-ctrl" class="ctrl-area">
+        <p class="pulse-text">⏳ انتظار المضيف…</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
