@@ -1,0 +1,21 @@
+{
+  "name": "ECHO – لعبة المزامنة الذهنية",
+  "short_name": "ECHO",
+  "description": "لعبة مزامنة ذهنية جماعية – هل تستطيع التفكير مثل أصدقائك؟",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d0b1e",
+  "theme_color": "#7c3aed",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "entertainment"]
+}
