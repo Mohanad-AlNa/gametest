@@ -2,7 +2,7 @@ name: 🎮 بناء تخاطر - Build Takhattur APK
 
 on:
   push:
-    branches: [main, master]
+    branches: ['**']
   workflow_dispatch:
     inputs:
       release:

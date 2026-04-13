@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import '../main.dart';
-import '../services/game_service.dart';
 import 'create_lobby_screen.dart';
 import 'join_lobby_screen.dart';
 
