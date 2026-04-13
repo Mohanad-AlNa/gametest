@@ -42,7 +42,7 @@ const List<Map<String, String>> gameCategories = [
   },
   {
     'category': 'مشاعر وأحاسيس',
-    'hint': 'أول مشعر تخطر ببالك الآن',
+    'hint': 'أول مشاعر تخطر ببالك الآن',
     'emoji': '💭',
   },
   {
