@@ -41,7 +41,7 @@ class PlayerInfo {
   PlayerInfo({
     required this.id,
     required this.name,
-    this.avatar = '��',
+    this.avatar = '🧠',
     this.isReady = false,
     this.isHost = false,
     this.score = 0,
