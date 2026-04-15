@@ -1,0 +1,97 @@
+name: 🎮 بناء تخاطر - Build Takhattur APK
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'إنشاء إصدار جديد (Create a new release)'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ☕ Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🐦 Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Install dependencies
+        run: flutter pub get
+
+      - name: 🔍 Analyze code
+        run: flutter analyze --no-fatal-infos
+        continue-on-error: true
+
+      - name: 🏗️ Build APK (Release)
+        run: |
+          flutter build apk \
+            --release \
+            --no-tree-shake-icons \
+            --dart-define=FLUTTER_WEB_USE_SKIA=true
+
+      - name: 📋 Get APK info
+        run: |
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          APK_SIZE=$(du -sh $APK_PATH | cut -f1)
+          echo "APK Size: $APK_SIZE"
+          echo "APK_SIZE=$APK_SIZE" >> $GITHUB_ENV
+          echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
+
+      - name: 📤 Upload APK as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: takhattur-apk-${{ github.run_number }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      - name: 🏷️ Create Release
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "🎮 تخاطر v1.0.${{ github.run_number }}"
+          body: |
+            ## 🎮 لعبة تخاطر - Takhattur Game
+            
+            ### تحميل التطبيق | Download
+            قم بتحميل ملف `takhattur-game.apk` وثبّته على هاتفك الأندرويد.
+            Download `takhattur-game.apk` and install it on your Android device.
+            
+            ### كيفية اللعب | How to Play
+            1. **إنشاء غرفة** | Create Lobby: أنشئ غرفة وشارك عنوان IP مع أصدقائك
+            2. **انضمام** | Join: أدخل عنوان IP الخاص بالمضيف
+            3. **تأكد** أن جميع اللاعبين على نفس شبكة WiFi
+            4. يظهر تصنيف → اكتب أول شيء يخطر ببالك → الأكثر تطابقاً يفوز!
+            
+            ### المتطلبات | Requirements
+            - Android 5.0+ (API 21+)
+            - WiFi شبكة محلية مشتركة
+            
+            **حجم التطبيق | App Size:** ${{ env.APK_SIZE }}
+          files: build/app/outputs/flutter-apk/app-release.apk
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_unmatched_files: false
+          make_latest: true
+        continue-on-error: true
