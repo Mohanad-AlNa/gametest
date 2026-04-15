@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../data/categories.dart';
 
-// ─── Enums ───────────────────────────────────────────────────────────────────
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum GameMode { telepathy, zombie }
 
 enum GamePhase {
   idle,
@@ -13,43 +16,65 @@ enum GamePhase {
   playing,
   reviewing,
   finalResults,
+  zombieRoleReveal,
+  zombieNightPhase,
+  zombieMorningReveal,
+  zombieGameOver,
 }
 
-// ─── Models ──────────────────────────────────────────────────────────────────
+enum ZombieRole { human, zombie }
+
+// ─── Models ───────────────────────────────────────────────────────────────────
 
 class PlayerInfo {
   final String id;
   final String name;
+  String avatar;
   bool isReady;
   bool isHost;
   int score;
   bool hasAnswered;
+  bool isEliminated;
+  bool canVaccine;
+  bool revealUsed;
 
   PlayerInfo({
     required this.id,
     required this.name,
+    this.avatar = '��',
     this.isReady = false,
     this.isHost = false,
     this.score = 0,
     this.hasAnswered = false,
+    this.isEliminated = false,
+    this.canVaccine = false,
+    this.revealUsed = false,
   });
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        'avatar': avatar,
         'isReady': isReady,
         'isHost': isHost,
         'score': score,
         'hasAnswered': hasAnswered,
+        'isEliminated': isEliminated,
+        'canVaccine': canVaccine,
+        'revealUsed': revealUsed,
       };
 
   factory PlayerInfo.fromJson(Map<String, dynamic> j) => PlayerInfo(
-        id: j['id'],
-        name: j['name'],
-        isReady: j['isReady'] ?? false,
-        isHost: j['isHost'] ?? false,
-        score: j['score'] ?? 0,
-        hasAnswered: j['hasAnswered'] ?? false,
+        id: j['id'] as String,
+        name: j['name'] as String,
+        avatar: j['avatar'] as String? ?? '🧠',
+        isReady: j['isReady'] as bool? ?? false,
+        isHost: j['isHost'] as bool? ?? false,
+        score: j['score'] as int? ?? 0,
+        hasAnswered: j['hasAnswered'] as bool? ?? false,
+        isEliminated: j['isEliminated'] as bool? ?? false,
+        canVaccine: j['canVaccine'] as bool? ?? false,
+        revealUsed: j['revealUsed'] as bool? ?? false,
       );
 }
 
@@ -67,10 +92,10 @@ class AnswerGroup {
   });
 
   factory AnswerGroup.fromJson(Map<String, dynamic> j) => AnswerGroup(
-        answer: j['answer'],
-        playerIds: List<String>.from(j['playerIds']),
-        pointsEarned: j['pointsEarned'],
-        colorIndex: j['colorIndex'],
+        answer: j['answer'] as String,
+        playerIds: List<String>.from(j['playerIds'] as List),
+        pointsEarned: j['pointsEarned'] as int,
+        colorIndex: j['colorIndex'] as int,
       );
 
   Map<String, dynamic> toJson() => {
@@ -88,6 +113,7 @@ class GameService extends ChangeNotifier {
   HttpServer? _server;
   final List<WebSocket> _clients = [];
   final Map<String, String> _socketToPlayerId = {};
+  final Map<String, String> _playerIdToSocket = {};
 
   // ── Client state ──
   WebSocket? _socket;
@@ -97,7 +123,9 @@ class GameService extends ChangeNotifier {
   // ── Game state ──
   String _myId = '';
   String _myName = '';
+  String _myAvatar = '🧠';
   GamePhase _phase = GamePhase.idle;
+  GameMode _gameMode = GameMode.telepathy;
   List<PlayerInfo> _players = [];
   int _currentRound = 0;
   int _totalRounds = 5;
@@ -111,13 +139,33 @@ class GameService extends ChangeNotifier {
   Timer? _roundTimer;
   List<Map<String, String>> _roundCategories = [];
 
-  // ─── Getters ─────────────────────────────────────────────────────────────
+  // ── Zombie state (client-side) ──
+  ZombieRole? _myZombieRole;
+  String _zombieRevealedName = '';
+  ZombieRole? _zombieRevealedRole;
+  List<Map<String, dynamic>> _morningEvents = [];
+  String _zombieWinner = '';
+  bool _myActionSubmitted = false;
+
+  // ── Server-side zombie private state ──
+  Map<String, ZombieRole> _serverZombieRoles = {};
+  Map<String, Map<String, dynamic>> _serverNightActions = {};
+
+  // ─── Getters ──────────────────────────────────────────────────────────────
 
   bool get isHost => _isHost;
   String get localIp => _localIp;
   String get myId => _myId;
   String get myName => _myName;
+  String get myAvatar => _myAvatar;
   GamePhase get phase => _phase;
+  GameMode get gameMode => _gameMode;
+  ZombieRole? get myZombieRole => _myZombieRole;
+  String get zombieRevealedName => _zombieRevealedName;
+  ZombieRole? get zombieRevealedRole => _zombieRevealedRole;
+  List<Map<String, dynamic>> get morningEvents => List.unmodifiable(_morningEvents);
+  String get zombieWinner => _zombieWinner;
+  bool get myActionSubmitted => _myActionSubmitted;
   List<PlayerInfo> get players => List.unmodifiable(_players);
   int get currentRound => _currentRound;
   int get totalRounds => _totalRounds;
@@ -129,15 +177,24 @@ class GameService extends ChangeNotifier {
   List<AnswerGroup> get answerGroups => List.unmodifiable(_answerGroups);
   String get errorMessage => _errorMessage;
   PlayerInfo? get myPlayer =>
-      _players.where((p) => p.id == _myId).isEmpty ? null : _players.firstWhere((p) => p.id == _myId);
+      _players.where((p) => p.id == _myId).isEmpty
+          ? null
+          : _players.firstWhere((p) => p.id == _myId);
   bool get canStartGame => _isHost && _players.length >= 2;
   int get answeredCount => _players.where((p) => p.hasAnswered).length;
 
-  // ─── Host: Create Lobby ──────────────────────────────────────────────────
+  // ─── Host: Create Lobby ───────────────────────────────────────────────────
 
-  Future<bool> createLobby(String playerName, {int rounds = 5}) async {
+  Future<bool> createLobby(
+    String playerName, {
+    int rounds = 5,
+    String avatar = '🧠',
+    GameMode gameMode = GameMode.telepathy,
+  }) async {
     _myName = playerName;
+    _myAvatar = avatar;
     _totalRounds = rounds;
+    _gameMode = gameMode;
     _isHost = true;
     _errorMessage = '';
 
@@ -145,8 +202,7 @@ class GameService extends ChangeNotifier {
       _localIp = await _getLocalIp();
       _server = await HttpServer.bind(InternetAddress.anyIPv4, 4567, shared: true);
       _listenToServer();
-      // Host connects as client via loopback
-      await _connectToServer('127.0.0.1', playerName);
+      await _connectToServer('127.0.0.1', playerName, avatar);
       return true;
     } catch (e) {
       _errorMessage = 'فشل إنشاء الغرفة: $e';
@@ -188,6 +244,9 @@ class GameService extends ChangeNotifier {
         case 'next_round':
           _serverHandleNextRound();
           break;
+        case 'zombie_night_action':
+          _serverHandleZombieNightAction(socket, msg);
+          break;
       }
     } catch (e) {
       debugPrint('Error handling message: $e');
@@ -197,23 +256,34 @@ class GameService extends ChangeNotifier {
   void _serverHandleJoin(WebSocket socket, Map<String, dynamic> msg) {
     if (_phase != GamePhase.lobby && _phase != GamePhase.idle) return;
     final name = msg['name'] as String;
+    final avatar = msg['avatar'] as String? ?? '🧠';
     final id = 'p${DateTime.now().millisecondsSinceEpoch}${_clients.indexOf(socket)}';
     final isFirst = _players.isEmpty;
-    _socketToPlayerId[socket.hashCode.toString()] = id;
-    _players.add(PlayerInfo(id: id, name: name, isHost: isFirst));
+    final socketKey = socket.hashCode.toString();
+    _socketToPlayerId[socketKey] = id;
+    _playerIdToSocket[id] = socketKey;
+    _players.add(PlayerInfo(id: id, name: name, avatar: avatar, isHost: isFirst));
     _phase = GamePhase.lobby;
     _broadcastPlayerList();
-    // Tell the socket its own id
     _sendTo(socket, {'type': 'joined', 'id': id, 'isHost': isFirst});
   }
 
   void _serverHandleStartGame(Map<String, dynamic> msg) {
     if (!_isHost || _players.length < 2) return;
-    _roundCategories = getShuffledCategories(_totalRounds);
-    _currentRound = 0;
-    _broadcast({'type': 'game_started', 'totalRounds': _totalRounds});
-    _serverStartNextRound();
+    final modeStr = msg['mode'] as String? ?? 'telepathy';
+    if (modeStr == 'zombie') {
+      _gameMode = GameMode.zombie;
+      _serverStartZombieGame();
+    } else {
+      _gameMode = GameMode.telepathy;
+      _roundCategories = getShuffledCategories(_totalRounds);
+      _currentRound = 0;
+      _broadcast({'type': 'game_started', 'totalRounds': _totalRounds});
+      _serverStartNextRound();
+    }
   }
+
+  // ─── Telepathy server logic ───────────────────────────────────────────────
 
   void _serverStartNextRound() {
     _currentRound++;
@@ -221,7 +291,6 @@ class GameService extends ChangeNotifier {
       _serverEndGame();
       return;
     }
-    // Reset answers
     for (var p in _players) {
       p.hasAnswered = false;
     }
@@ -236,7 +305,6 @@ class GameService extends ChangeNotifier {
       'emoji': catData['emoji'],
       'timeLimit': 30,
     });
-    // Server-side timer
     _roundTimer?.cancel();
     int timeLeft = 30;
     _roundTimer = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -252,10 +320,13 @@ class GameService extends ChangeNotifier {
   void _serverHandleAnswer(WebSocket socket, Map<String, dynamic> msg) {
     final id = _socketToPlayerId[socket.hashCode.toString()];
     if (id == null) return;
-    if (_answers.containsKey(id)) return; // already answered
+    if (_answers.containsKey(id)) return;
     final answer = (msg['answer'] as String).trim().toLowerCase();
     _answers[id] = answer;
-    final player = _players.firstWhere((p) => p.id == id, orElse: () => PlayerInfo(id: '', name: ''));
+    final player = _players.firstWhere(
+      (p) => p.id == id,
+      orElse: () => PlayerInfo(id: '', name: ''),
+    );
     if (player.id.isNotEmpty) player.hasAnswered = true;
     _broadcast({'type': 'answer_count', 'count': _answers.length, 'total': _players.length});
     if (_answers.length >= _players.length) {
@@ -269,19 +340,20 @@ class GameService extends ChangeNotifier {
   }
 
   void _serverCalculateResults() {
-    // Group answers
     final groups = <String, List<String>>{};
     _answers.forEach((playerId, answer) {
       groups.putIfAbsent(answer, () => []).add(playerId);
     });
 
-    // Calculate points and build AnswerGroup list
     final answerGroups = <Map<String, dynamic>>[];
     int colorIdx = 0;
     groups.forEach((answer, ids) {
       final points = ids.length >= 2 ? ids.length * 10 : 0;
       for (final id in ids) {
-        final p = _players.firstWhere((pp) => pp.id == id, orElse: () => PlayerInfo(id: '', name: ''));
+        final p = _players.firstWhere(
+          (pp) => pp.id == id,
+          orElse: () => PlayerInfo(id: '', name: ''),
+        );
         if (p.id.isNotEmpty) p.score += points;
       }
       answerGroups.add({
@@ -292,7 +364,6 @@ class GameService extends ChangeNotifier {
       });
     });
 
-    // Build score map
     final scores = <String, int>{};
     for (var p in _players) {
       scores[p.id] = p.score;
@@ -314,6 +385,279 @@ class GameService extends ChangeNotifier {
     }
     _broadcast({'type': 'game_over', 'scores': scores});
   }
+
+  // ─── Zombie server logic ──────────────────────────────────────────────────
+
+  void _serverStartZombieGame() {
+    _currentRound = 0;
+    _serverZombieRoles = {};
+    _serverNightActions = {};
+
+    for (var p in _players) {
+      p.isEliminated = false;
+      p.canVaccine = false;
+      p.revealUsed = false;
+      p.score = 0;
+    }
+
+    final playerCount = _players.length;
+    final zombieCount = min((playerCount ~/ 3) + 1, 3);
+    final shuffled = List<PlayerInfo>.from(_players)..shuffle(Random());
+    for (int i = 0; i < shuffled.length; i++) {
+      _serverZombieRoles[shuffled[i].id] =
+          i < zombieCount ? ZombieRole.zombie : ZombieRole.human;
+    }
+
+    _broadcast({
+      'type': 'game_started',
+      'totalRounds': _totalRounds,
+      'mode': 'zombie',
+    });
+
+    // Send private role to each player
+    for (final p in _players) {
+      final role = _serverZombieRoles[p.id];
+      final socketKey = _playerIdToSocket[p.id];
+      if (socketKey != null && role != null) {
+        final socket = _clients.firstWhere(
+          (c) => c.hashCode.toString() == socketKey,
+          orElse: () => _clients.first,
+        );
+        _sendTo(socket, {
+          'type': 'your_zombie_role',
+          'role': role == ZombieRole.zombie ? 'zombie' : 'human',
+        });
+      }
+    }
+
+    _broadcast({
+      'type': 'zombie_phase',
+      'phase': 'roleReveal',
+      'players': _players.map((p) => p.toJson()).toList(),
+    });
+
+    Timer(const Duration(seconds: 6), _serverStartZombieNight);
+  }
+
+  void _serverStartZombieNight() {
+    _currentRound++;
+    _serverNightActions = {};
+
+    _broadcast({
+      'type': 'zombie_phase',
+      'phase': 'nightPhase',
+      'round': _currentRound,
+      'totalRounds': _totalRounds,
+      'players': _players.map((p) => p.toJson()).toList(),
+    });
+
+    int timeLeft = 30;
+    _roundTimer?.cancel();
+    _roundTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      timeLeft--;
+      _broadcast({'type': 'timer', 'timeLeft': timeLeft});
+      if (timeLeft <= 0) {
+        t.cancel();
+        _serverProcessZombieNight();
+      }
+    });
+  }
+
+  void _serverHandleZombieNightAction(WebSocket socket, Map<String, dynamic> msg) {
+    final id = _socketToPlayerId[socket.hashCode.toString()];
+    if (id == null) return;
+    final player = _players.firstWhere(
+      (p) => p.id == id,
+      orElse: () => PlayerInfo(id: '', name: ''),
+    );
+    if (player.id.isEmpty || player.isEliminated) return;
+    if (_serverNightActions.containsKey(id)) return;
+
+    _serverNightActions[id] = {
+      'action': msg['action'] ?? 'pass',
+      'targetId': msg['targetId'] ?? '',
+      'playerId': id,
+    };
+
+    final alivePlayers = _players.where((p) => !p.isEliminated).toList();
+    if (_serverNightActions.length >= alivePlayers.length) {
+      _roundTimer?.cancel();
+      _serverProcessZombieNight();
+    }
+  }
+
+  void _serverProcessZombieNight() {
+    final events = <Map<String, dynamic>>[];
+    final newlyInfected = <String>{};
+    final eliminated = <String>{};
+
+    for (final entry in _serverNightActions.entries) {
+      final actorId = entry.key;
+      final action = entry.value['action'] as String;
+      final targetId = entry.value['targetId'] as String;
+      final actorRole = _serverZombieRoles[actorId];
+      final actor = _players.firstWhere(
+        (p) => p.id == actorId,
+        orElse: () => PlayerInfo(id: '', name: ''),
+      );
+      if (actor.id.isEmpty) continue;
+
+      if (action == 'bite' && actorRole == ZombieRole.zombie) {
+        if (targetId.isNotEmpty) {
+          final target = _players.firstWhere(
+            (p) => p.id == targetId,
+            orElse: () => PlayerInfo(id: '', name: ''),
+          );
+          if (target.id.isNotEmpty && !target.isEliminated) {
+            final targetRole = _serverZombieRoles[targetId];
+            if (targetRole == ZombieRole.human) {
+              newlyInfected.add(targetId);
+              events.add({'event': 'bitten', 'victimName': target.name, 'victimId': targetId});
+            } else if (targetRole == ZombieRole.zombie) {
+              actor.score -= 20;
+              target.score -= 20;
+              events.add({
+                'event': 'friendly_fire',
+                'zombie1Name': actor.name,
+                'zombie2Name': target.name,
+              });
+            }
+          }
+        }
+      } else if (action == 'reveal' && actorRole == ZombieRole.zombie && !actor.revealUsed) {
+        if (targetId.isNotEmpty) {
+          final target = _players.firstWhere(
+            (p) => p.id == targetId,
+            orElse: () => PlayerInfo(id: '', name: ''),
+          );
+          if (target.id.isNotEmpty) {
+            actor.revealUsed = true;
+            final socketKey = _playerIdToSocket[actorId];
+            if (socketKey != null) {
+              final socket = _clients.firstWhere(
+                (c) => c.hashCode.toString() == socketKey,
+                orElse: () => _clients.first,
+              );
+              final targetRole = _serverZombieRoles[targetId];
+              _sendTo(socket, {
+                'type': 'reveal_result',
+                'targetName': target.name,
+                'targetRole': targetRole == ZombieRole.zombie ? 'zombie' : 'human',
+              });
+            }
+          }
+        }
+      } else if (action == 'shoot' && actorRole == ZombieRole.human) {
+        if (targetId.isNotEmpty) {
+          final target = _players.firstWhere(
+            (p) => p.id == targetId,
+            orElse: () => PlayerInfo(id: '', name: ''),
+          );
+          if (target.id.isNotEmpty && !target.isEliminated) {
+            final targetRole = _serverZombieRoles[targetId];
+            if (targetRole == ZombieRole.zombie) {
+              eliminated.add(targetId);
+              events.add({
+                'event': 'shot_zombie',
+                'shooterName': actor.name,
+                'targetName': target.name,
+              });
+            } else {
+              actor.score -= 20;
+              target.score -= 10;
+              events.add({
+                'event': 'shot_human',
+                'shooterName': actor.name,
+                'targetName': target.name,
+              });
+            }
+          }
+        }
+      } else if (action == 'vaccine' && actor.canVaccine) {
+        actor.canVaccine = false;
+        newlyInfected.remove(actorId);
+        events.add({'event': 'vaccine', 'playerName': actor.name});
+      }
+    }
+
+    // Apply infections
+    for (final id in newlyInfected) {
+      _serverZombieRoles[id] = ZombieRole.zombie;
+      final p = _players.firstWhere(
+        (pp) => pp.id == id,
+        orElse: () => PlayerInfo(id: '', name: ''),
+      );
+      if (p.id.isNotEmpty) {
+        p.canVaccine = true;
+      }
+    }
+
+    // Apply eliminations
+    for (final id in eliminated) {
+      final p = _players.firstWhere(
+        (pp) => pp.id == id,
+        orElse: () => PlayerInfo(id: '', name: ''),
+      );
+      if (p.id.isNotEmpty) p.isEliminated = true;
+    }
+
+    if (events.isEmpty) {
+      events.add({'event': 'quiet'});
+    }
+
+    // Survivor points
+    for (final p in _players) {
+      if (!p.isEliminated) p.score += 10;
+    }
+
+    // Check win condition
+    final aliveZombies = _players
+        .where((p) => !p.isEliminated && _serverZombieRoles[p.id] == ZombieRole.zombie)
+        .length;
+    final aliveHumans = _players
+        .where((p) => !p.isEliminated && _serverZombieRoles[p.id] == ZombieRole.human)
+        .length;
+
+    bool gameOver = false;
+    String? winner;
+
+    if (aliveZombies == 0) {
+      gameOver = true;
+      winner = 'humans';
+    } else if (aliveZombies >= aliveHumans) {
+      gameOver = true;
+      winner = 'zombies';
+    } else if (_currentRound >= _totalRounds) {
+      gameOver = true;
+      winner = aliveHumans > aliveZombies
+          ? 'humans'
+          : aliveZombies > aliveHumans
+              ? 'zombies'
+              : 'draw';
+    }
+
+    final scores = <String, int>{};
+    for (var p in _players) {
+      scores[p.id] = p.score;
+    }
+
+    _broadcast({
+      'type': 'zombie_morning_result',
+      'events': events,
+      'players': _players.map((p) => p.toJson()).toList(),
+      'scores': scores,
+      'round': _currentRound,
+      'totalRounds': _totalRounds,
+      'gameOver': gameOver,
+      'winner': winner,
+    });
+
+    if (!gameOver) {
+      Timer(const Duration(seconds: 5), _serverStartZombieNight);
+    }
+  }
+
+  // ─── Broadcast / SendTo helpers ───────────────────────────────────────────
 
   void _broadcast(Map<String, dynamic> msg) {
     final data = jsonEncode(msg);
@@ -338,22 +682,25 @@ class GameService extends ChangeNotifier {
   }
 
   void _handleClientDisconnect(WebSocket socket) {
-    final id = _socketToPlayerId.remove(socket.hashCode.toString());
+    final socketKey = socket.hashCode.toString();
+    final id = _socketToPlayerId.remove(socketKey);
     if (id != null) {
+      _playerIdToSocket.remove(id);
       _players.removeWhere((p) => p.id == id);
       _clients.remove(socket);
       if (_phase == GamePhase.lobby) _broadcastPlayerList();
     }
   }
 
-  // ─── Client: Join Lobby ──────────────────────────────────────────────────
+  // ─── Client: Join Lobby ───────────────────────────────────────────────────
 
-  Future<bool> joinLobby(String ip, String playerName) async {
+  Future<bool> joinLobby(String ip, String playerName, {String avatar = '🧠'}) async {
     _myName = playerName;
+    _myAvatar = avatar;
     _isHost = false;
     _errorMessage = '';
     try {
-      await _connectToServer(ip.trim(), playerName);
+      await _connectToServer(ip.trim(), playerName, avatar);
       return true;
     } catch (e) {
       _errorMessage = 'تعذّر الاتصال بالغرفة. تأكد من عنوان IP';
@@ -362,14 +709,14 @@ class GameService extends ChangeNotifier {
     }
   }
 
-  Future<void> _connectToServer(String ip, String name) async {
+  Future<void> _connectToServer(String ip, String name, String avatar) async {
     _socket = await WebSocket.connect('ws://$ip:4567').timeout(const Duration(seconds: 5));
     _socket!.listen(
       _handleServerMessage,
       onDone: _handleDisconnect,
       onError: (_) => _handleDisconnect(),
     );
-    _send({'type': 'join', 'name': name});
+    _send({'type': 'join', 'name': name, 'avatar': avatar});
   }
 
   void _handleServerMessage(dynamic data) {
@@ -389,6 +736,8 @@ class GameService extends ChangeNotifier {
           break;
         case 'game_started':
           _totalRounds = msg['totalRounds'] as int;
+          final modeStr = msg['mode'] as String? ?? 'telepathy';
+          _gameMode = modeStr == 'zombie' ? GameMode.zombie : GameMode.telepathy;
           _phase = GamePhase.countdown;
           break;
         case 'new_round':
@@ -417,18 +766,71 @@ class GameService extends ChangeNotifier {
           _answerGroups = (msg['groups'] as List)
               .map((g) => AnswerGroup.fromJson(g as Map<String, dynamic>))
               .toList();
-          final scores = msg['scores'] as Map<String, dynamic>;
+          final scoresR = msg['scores'] as Map<String, dynamic>;
           for (var p in _players) {
-            p.score = scores[p.id] as int? ?? p.score;
+            p.score = scoresR[p.id] as int? ?? p.score;
           }
           _phase = GamePhase.reviewing;
           break;
         case 'game_over':
-          final scores = msg['scores'] as Map<String, dynamic>;
+          final scoresG = msg['scores'] as Map<String, dynamic>;
           for (var p in _players) {
-            p.score = scores[p.id] as int? ?? p.score;
+            p.score = scoresG[p.id] as int? ?? p.score;
           }
           _phase = GamePhase.finalResults;
+          break;
+        // Zombie messages
+        case 'your_zombie_role':
+          final roleStr = msg['role'] as String;
+          _myZombieRole = roleStr == 'zombie' ? ZombieRole.zombie : ZombieRole.human;
+          break;
+        case 'zombie_phase':
+          final phase = msg['phase'] as String;
+          if (msg['players'] != null) {
+            _players = (msg['players'] as List)
+                .map((p) => PlayerInfo.fromJson(p as Map<String, dynamic>))
+                .toList();
+          }
+          if (msg['round'] != null) _currentRound = msg['round'] as int;
+          if (msg['totalRounds'] != null) _totalRounds = msg['totalRounds'] as int;
+          switch (phase) {
+            case 'roleReveal':
+              _phase = GamePhase.zombieRoleReveal;
+              break;
+            case 'nightPhase':
+              _phase = GamePhase.zombieNightPhase;
+              _myActionSubmitted = false;
+              _timeLeft = 30;
+              break;
+          }
+          break;
+        case 'reveal_result':
+          _zombieRevealedName = msg['targetName'] as String;
+          final roleStr2 = msg['targetRole'] as String;
+          _zombieRevealedRole =
+              roleStr2 == 'zombie' ? ZombieRole.zombie : ZombieRole.human;
+          break;
+        case 'zombie_morning_result':
+          final rawEvents = msg['events'] as List;
+          _morningEvents = rawEvents.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          if (msg['players'] != null) {
+            _players = (msg['players'] as List)
+                .map((p) => PlayerInfo.fromJson(p as Map<String, dynamic>))
+                .toList();
+          }
+          final scoresM = msg['scores'] as Map<String, dynamic>;
+          for (var p in _players) {
+            p.score = scoresM[p.id] as int? ?? p.score;
+          }
+          _currentRound = msg['round'] as int;
+          _totalRounds = msg['totalRounds'] as int;
+          final gameOver = msg['gameOver'] as bool? ?? false;
+          if (gameOver) {
+            _zombieWinner = msg['winner'] as String? ?? '';
+            _phase = GamePhase.zombieGameOver;
+          } else {
+            _phase = GamePhase.zombieMorningReveal;
+          }
           break;
       }
       notifyListeners();
@@ -449,18 +851,23 @@ class GameService extends ChangeNotifier {
     } catch (_) {}
   }
 
-  // ─── Game Actions ─────────────────────────────────────────────────────────
+  // ─── Game Actions ──────────────────────────────────────────────────────────
 
   void startGame() {
     if (!_isHost) return;
-    _send({'type': 'start_game'});
+    _send({
+      'type': 'start_game',
+      'mode': _gameMode == GameMode.zombie ? 'zombie' : 'telepathy',
+    });
   }
 
   void submitAnswer(String answer) {
     if (answer.trim().isEmpty) return;
     _send({'type': 'submit_answer', 'answer': answer.trim()});
-    // Optimistically mark as answered
-    final p = _players.firstWhere((pp) => pp.id == _myId, orElse: () => PlayerInfo(id: '', name: ''));
+    final p = _players.firstWhere(
+      (pp) => pp.id == _myId,
+      orElse: () => PlayerInfo(id: '', name: ''),
+    );
     if (p.id.isNotEmpty) {
       p.hasAnswered = true;
       notifyListeners();
@@ -470,6 +877,13 @@ class GameService extends ChangeNotifier {
   void nextRound() {
     if (!_isHost) return;
     _send({'type': 'next_round'});
+  }
+
+  void submitZombieAction(String action, String? targetId) {
+    if (_myActionSubmitted) return;
+    _myActionSubmitted = true;
+    _send({'type': 'zombie_night_action', 'action': action, 'targetId': targetId ?? ''});
+    notifyListeners();
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -505,6 +919,7 @@ class GameService extends ChangeNotifier {
     }
     _clients.clear();
     _socketToPlayerId.clear();
+    _playerIdToSocket.clear();
     try {
       await _server?.close(force: true);
     } catch (_) {}
@@ -515,8 +930,17 @@ class GameService extends ChangeNotifier {
     _phase = GamePhase.idle;
     _isHost = false;
     _myId = '';
+    _myAvatar = '🧠';
     _currentRound = 0;
     _errorMessage = '';
+    _myZombieRole = null;
+    _zombieRevealedName = '';
+    _zombieRevealedRole = null;
+    _morningEvents = [];
+    _zombieWinner = '';
+    _myActionSubmitted = false;
+    _serverZombieRoles = {};
+    _serverNightActions = {};
     notifyListeners();
   }
 

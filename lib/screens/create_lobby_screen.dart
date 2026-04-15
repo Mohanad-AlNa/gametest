@@ -8,7 +8,13 @@ import 'lobby_screen.dart';
 
 class CreateLobbyScreen extends StatefulWidget {
   final String playerName;
-  const CreateLobbyScreen({super.key, required this.playerName});
+  final String avatar;
+
+  const CreateLobbyScreen({
+    super.key,
+    required this.playerName,
+    this.avatar = '🧠',
+  });
 
   @override
   State<CreateLobbyScreen> createState() => _CreateLobbyScreenState();
@@ -16,11 +22,15 @@ class CreateLobbyScreen extends StatefulWidget {
 
 class _CreateLobbyScreenState extends State<CreateLobbyScreen>
     with SingleTickerProviderStateMixin {
-  bool _loading = true;
+  // Setup state
+  bool _setupDone = false;
+  bool _loading = false;
   bool _success = false;
+
   late AnimationController _pulseController;
   late Animation<double> _pulse;
   int _selectedRounds = 5;
+  GameMode _selectedMode = GameMode.telepathy;
 
   @override
   void initState() {
@@ -32,12 +42,20 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
     _pulse = Tween<double>(begin: 1.0, end: 1.08).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    _createLobby();
   }
 
   Future<void> _createLobby() async {
+    setState(() {
+      _loading = true;
+      _setupDone = true;
+    });
     final service = context.read<GameService>();
-    final ok = await service.createLobby(widget.playerName, rounds: _selectedRounds);
+    final ok = await service.createLobby(
+      widget.playerName,
+      rounds: _selectedRounds,
+      avatar: widget.avatar,
+      gameMode: _selectedMode,
+    );
     if (!mounted) return;
     if (ok) {
       setState(() {
@@ -45,7 +63,10 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
         _success = true;
       });
     } else {
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _setupDone = false;
+      });
       _showError(service.errorMessage);
     }
   }
@@ -60,7 +81,6 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
               Navigator.pop(context);
             },
             child: Text('حسناً', style: GoogleFonts.cairo(color: AppColors.primary)),
@@ -95,17 +115,263 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
             onPressed: () {
-              context.read<GameService>().disconnect();
+              if (_success) {
+                context.read<GameService>().disconnect();
+              }
               Navigator.pop(context);
             },
           ),
-          title: Text('إنشاء غرفة', style: GoogleFonts.cairo(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: Text(
+            'إنشاء غرفة',
+            style: GoogleFonts.cairo(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
         ),
         body: _loading
             ? _buildLoading()
             : _success
                 ? _buildContent()
-                : const SizedBox(),
+                : _buildSetupScreen(),
+      ),
+    );
+  }
+
+  Widget _buildSetupScreen() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 16),
+          // Avatar preview
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceLight,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.primary.withOpacity(0.5), width: 2),
+            ),
+            child: Center(
+              child: Text(widget.avatar, style: const TextStyle(fontSize: 44)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            widget.playerName,
+            style: GoogleFonts.cairo(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 32),
+          // Game mode selector
+          _buildModeSelector(),
+          const SizedBox(height: 24),
+          // Rounds selector
+          _buildRoundsSelector(),
+          const SizedBox(height: 32),
+          // Create button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _createLobby,
+              icon: const Icon(Icons.add_circle_outline, size: 22),
+              label: Text(
+                'إنشاء الغرفة',
+                style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                elevation: 8,
+                shadowColor: AppColors.primary.withOpacity(0.5),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeSelector() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '🎮 نوع اللعبة',
+            style: GoogleFonts.cairo(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedMode = GameMode.telepathy),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: _selectedMode == GameMode.telepathy
+                          ? AppColors.primary.withOpacity(0.2)
+                          : AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _selectedMode == GameMode.telepathy
+                            ? AppColors.primary
+                            : AppColors.cardBorder,
+                        width: _selectedMode == GameMode.telepathy ? 2 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text('🧠', style: TextStyle(fontSize: 32)),
+                        const SizedBox(height: 6),
+                        Text(
+                          'تخاطر',
+                          style: GoogleFonts.cairo(
+                            color: _selectedMode == GameMode.telepathy
+                                ? AppColors.primary
+                                : AppColors.textSecondary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          'كلمة موحدة',
+                          style: GoogleFonts.cairo(
+                            color: AppColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedMode = GameMode.zombie),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: _selectedMode == GameMode.zombie
+                          ? AppColors.zombieGreen.withOpacity(0.15)
+                          : AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _selectedMode == GameMode.zombie
+                            ? AppColors.zombieGreen
+                            : AppColors.cardBorder,
+                        width: _selectedMode == GameMode.zombie ? 2 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text('🧟', style: TextStyle(fontSize: 32)),
+                        const SizedBox(height: 6),
+                        Text(
+                          'وباء الزومبي',
+                          style: GoogleFonts.cairo(
+                            color: _selectedMode == GameMode.zombie
+                                ? AppColors.zombieGreen
+                                : AppColors.textSecondary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          'خداع اجتماعي',
+                          style: GoogleFonts.cairo(
+                            color: AppColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoundsSelector() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '⚙️ عدد الجولات',
+            style: GoogleFonts.cairo(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [3, 5, 7, 10].map((n) {
+              final selected = _selectedRounds == n;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedRounds = n),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.primary : AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: selected ? AppColors.primary : AppColors.cardBorder,
+                      width: 2,
+                    ),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: AppColors.primary.withOpacity(0.4),
+                              blurRadius: 12,
+                            )
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$n',
+                      style: GoogleFonts.cairo(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: selected ? Colors.white : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -117,7 +383,10 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
         children: [
           const CircularProgressIndicator(color: AppColors.primary),
           const SizedBox(height: 20),
-          Text('جاري إنشاء الغرفة...', style: GoogleFonts.cairo(color: AppColors.textSecondary, fontSize: 16)),
+          Text(
+            'جاري إنشاء الغرفة...',
+            style: GoogleFonts.cairo(color: AppColors.textSecondary, fontSize: 16),
+          ),
         ],
       ),
     );
@@ -129,16 +398,35 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // IP Card
+          // Mode badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: service.gameMode == GameMode.zombie
+                  ? AppColors.zombieGreen.withOpacity(0.15)
+                  : AppColors.primary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: service.gameMode == GameMode.zombie
+                    ? AppColors.zombieGreen
+                    : AppColors.primary,
+              ),
+            ),
+            child: Text(
+              service.gameMode == GameMode.zombie ? '�� وباء الزومبي' : '🧠 تخاطر',
+              style: GoogleFonts.cairo(
+                color: service.gameMode == GameMode.zombie
+                    ? AppColors.zombieGreen
+                    : AppColors.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           _buildIpCard(service.localIp),
           const SizedBox(height: 24),
-          // Rounds selector
-          _buildRoundsSelector(),
-          const SizedBox(height: 24),
-          // Players list
           _buildPlayerList(service),
           const SizedBox(height: 24),
-          // Start button
           _buildStartButton(service),
           const SizedBox(height: 16),
           Text(
@@ -172,10 +460,7 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
         children: [
           const Text('📡', style: TextStyle(fontSize: 40)),
           const SizedBox(height: 12),
-          Text(
-            'عنوان الغرفة',
-            style: GoogleFonts.cairo(fontSize: 14, color: Colors.white70),
-          ),
+          Text('عنوان الغرفة', style: GoogleFonts.cairo(fontSize: 14, color: Colors.white70)),
           const SizedBox(height: 8),
           AnimatedBuilder(
             animation: _pulse,
@@ -204,70 +489,20 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
                   content: Text('تم نسخ العنوان!', style: GoogleFonts.cairo()),
                   backgroundColor: AppColors.success,
                   behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape:
+                      RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               );
             },
             icon: const Icon(Icons.copy, color: Colors.white, size: 18),
-            label: Text('نسخ العنوان', style: GoogleFonts.cairo(color: Colors.white, fontSize: 14)),
+            label: Text(
+              'نسخ العنوان',
+              style: GoogleFonts.cairo(color: Colors.white, fontSize: 14),
+            ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Colors.white54),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRoundsSelector() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        children: [
-          Text(
-            '⚙️ عدد الجولات',
-            style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [3, 5, 7, 10].map((n) {
-              final selected = _selectedRounds == n;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedRounds = n),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.primary : AppColors.surfaceLight,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: selected ? AppColors.primary : AppColors.cardBorder,
-                      width: 2,
-                    ),
-                    boxShadow: selected
-                        ? [BoxShadow(color: AppColors.primary.withOpacity(0.4), blurRadius: 12)]
-                        : null,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$n',
-                      style: GoogleFonts.cairo(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: selected ? Colors.white : AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
           ),
         ],
       ),
@@ -289,7 +524,11 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
             children: [
               Text(
                 '👥 اللاعبون',
-                style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                style: GoogleFonts.cairo(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
               const Spacer(),
               Container(
@@ -300,7 +539,11 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
                 ),
                 child: Text(
                   '${service.players.length}/8',
-                  style: GoogleFonts.cairo(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.cairo(
+                    color: AppColors.primary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -325,9 +568,7 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: p.id == myId
-            ? AppColors.primary.withOpacity(0.15)
-            : AppColors.surfaceLight,
+        color: p.id == myId ? AppColors.primary.withOpacity(0.15) : AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: p.id == myId ? AppColors.primary.withOpacity(0.5) : Colors.transparent,
@@ -336,24 +577,25 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.3),
+              color: AppColors.primary.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
             child: Center(
-              child: Text(
-                p.name.isNotEmpty ? p.name[0] : '?',
-                style: GoogleFonts.cairo(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
+              child: Text(p.avatar, style: const TextStyle(fontSize: 22)),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               p.name,
-              style: GoogleFonts.cairo(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              style: GoogleFonts.cairo(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           if (p.isHost)
@@ -363,7 +605,10 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
                 color: AppColors.accent.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text('👑 مضيف', style: GoogleFonts.cairo(color: AppColors.accent, fontSize: 12)),
+              child: Text(
+                '👑 مضيف',
+                style: GoogleFonts.cairo(color: AppColors.accent, fontSize: 12),
+              ),
             ),
           if (p.id == myId && !p.isHost)
             Container(
@@ -372,7 +617,10 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
                 color: AppColors.secondary.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text('أنت', style: GoogleFonts.cairo(color: AppColors.secondary, fontSize: 12)),
+              child: Text(
+                'أنت',
+                style: GoogleFonts.cairo(color: AppColors.secondary, fontSize: 12),
+              ),
             ),
         ],
       ),
@@ -381,28 +629,44 @@ class _CreateLobbyScreenState extends State<CreateLobbyScreen>
 
   Widget _buildStartButton(GameService service) {
     final canStart = service.canStartGame;
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: canStart ? _proceedToLobby : null,
-        icon: const Icon(Icons.play_arrow_rounded, size: 26),
-        label: Text(
-          canStart
-              ? 'ابدأ اللعبة (${service.players.length} لاعبين)'
-              : 'في انتظار لاعبين... (2 على الأقل)',
-          style: GoogleFonts.cairo(fontSize: 17, fontWeight: FontWeight.bold),
+    final needsMoreForZombie =
+        service.gameMode == GameMode.zombie && service.players.length < 3;
+    return Column(
+      children: [
+        if (needsMoreForZombie)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              '⚠️ لعبة الزومبي تحتاج 3 لاعبين على الأقل',
+              style: GoogleFonts.cairo(color: AppColors.error, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: canStart && !needsMoreForZombie ? _proceedToLobby : null,
+            icon: const Icon(Icons.play_arrow_rounded, size: 26),
+            label: Text(
+              canStart && !needsMoreForZombie
+                  ? 'ابدأ اللعبة (${service.players.length} لاعبين)'
+                  : 'في انتظار لاعبين...',
+              style: GoogleFonts.cairo(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  canStart && !needsMoreForZombie ? AppColors.success : AppColors.surface,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.surface,
+              disabledForegroundColor: AppColors.textSecondary,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              elevation: canStart && !needsMoreForZombie ? 8 : 0,
+              shadowColor: AppColors.success.withOpacity(0.5),
+            ),
+          ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: canStart ? AppColors.success : AppColors.surface,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.surface,
-          disabledForegroundColor: AppColors.textSecondary,
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          elevation: canStart ? 8 : 0,
-          shadowColor: AppColors.success.withOpacity(0.5),
-        ),
-      ),
+      ],
     );
   }
 }

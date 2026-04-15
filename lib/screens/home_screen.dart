@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../data/avatars.dart';
 import '../main.dart';
 import 'create_lobby_screen.dart';
 import 'join_lobby_screen.dart';
@@ -15,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final _nameController = TextEditingController();
   late AnimationController _bgController;
   late Animation<Alignment> _bgAnimation;
+  String _selectedAvatar = '🧠';
 
   @override
   void initState() {
@@ -46,7 +48,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CreateLobbyScreen(playerName: name),
+        builder: (_) => CreateLobbyScreen(
+          playerName: name,
+          avatar: _selectedAvatar,
+        ),
       ),
     );
   }
@@ -60,7 +65,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => JoinLobbyScreen(playerName: name),
+        builder: (_) => JoinLobbyScreen(
+          playerName: name,
+          avatar: _selectedAvatar,
+        ),
       ),
     );
   }
@@ -104,7 +112,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 40),
-                  // Logo
                   _buildLogo(),
                   const SizedBox(height: 16),
                   Text(
@@ -128,16 +135,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       color: AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 50),
-                  // Name input
+                  const SizedBox(height: 36),
+                  _buildAvatarPicker(),
+                  const SizedBox(height: 24),
                   _buildNameInput(),
                   const SizedBox(height: 40),
-                  // Buttons
                   _buildCreateButton(),
                   const SizedBox(height: 16),
                   _buildJoinButton(),
                   const SizedBox(height: 40),
-                  // How to play
                   _buildHowToPlay(),
                 ],
               ),
@@ -167,9 +173,67 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ],
       ),
-      child: const Center(
-        child: Text('🧠', style: TextStyle(fontSize: 46)),
+      child: Center(
+        child: Text(_selectedAvatar, style: const TextStyle(fontSize: 46)),
       ),
+    );
+  }
+
+  Widget _buildAvatarPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'اختر شخصيتك',
+          style: GoogleFonts.cairo(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 64,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: playerAvatars.length,
+            itemBuilder: (context, index) {
+              final avatar = playerAvatars[index];
+              final isSelected = _selectedAvatar == avatar;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedAvatar = avatar),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primary.withOpacity(0.25)
+                        : AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected ? AppColors.primary : AppColors.cardBorder,
+                      width: isSelected ? 2.5 : 1,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: AppColors.primary.withOpacity(0.5),
+                              blurRadius: 12,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Center(
+                    child: Text(avatar, style: const TextStyle(fontSize: 28)),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -206,7 +270,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: ElevatedButton.icon(
         onPressed: _onCreateLobby,
         icon: const Icon(Icons.add_circle_outline, size: 22),
-        label: Text('إنشاء غرفة جديدة', style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold)),
+        label: Text(
+          'إنشاء غرفة جديدة',
+          style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           padding: const EdgeInsets.symmetric(vertical: 18),

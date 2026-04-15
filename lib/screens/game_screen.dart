@@ -137,7 +137,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       _buildCategoryCard(service),
                       const SizedBox(height: 28),
                       // Answer count
-                      _buildAnswerCount(answered, total),
+                      _buildAnswerCount(answered, total, service),
                       const SizedBox(height: 20),
                       // Answer input
                       _buildAnswerInput(),
@@ -322,29 +322,32 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildAnswerCount(int answered, int total) {
+  Widget _buildAnswerCount(int answered, int total, GameService service) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         ...List.generate(total, (i) {
-          final done = i < answered;
+          final player = i < service.players.length ? service.players[i] : null;
+          final done = player?.hasAnswered ?? (i < answered);
           return Container(
             margin: const EdgeInsets.symmetric(horizontal: 3),
-            width: done ? 24 : 20,
-            height: done ? 24 : 20,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              color: done ? AppColors.success : AppColors.surface,
+              color: done ? AppColors.success.withOpacity(0.2) : AppColors.surface,
               shape: BoxShape.circle,
               border: Border.all(
                 color: done ? AppColors.success : AppColors.cardBorder,
                 width: 2,
               ),
             ),
-            child: done
-                ? const Center(
-                    child: Icon(Icons.check, size: 14, color: Colors.white),
-                  )
-                : null,
+            child: Center(
+              child: player != null
+                  ? Text(player.avatar, style: const TextStyle(fontSize: 18))
+                  : done
+                      ? const Icon(Icons.check, size: 14, color: Colors.white)
+                      : null,
+            ),
           );
         }),
         const SizedBox(width: 10),

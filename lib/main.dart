@@ -38,6 +38,11 @@ class AppColors {
   static const Color textSecondary = Color(0xFFB0A8D0);
   static const Color cardBorder = Color(0xFF3D2E80);
 
+  static const Color zombieGreen = Color(0xFF39FF14);
+  static const Color zombieDark = Color(0xFF0D2010);
+  static const Color zombieRed = Color(0xFFFF1744);
+  static const Color humanBlue = Color(0xFF00B0FF);
+
   static const List<Color> groupColors = [
     Color(0xFF7C4DFF),
     Color(0xFF00E5FF),

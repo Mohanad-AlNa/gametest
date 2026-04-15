@@ -7,7 +7,13 @@ import 'lobby_screen.dart';
 
 class JoinLobbyScreen extends StatefulWidget {
   final String playerName;
-  const JoinLobbyScreen({super.key, required this.playerName});
+  final String avatar;
+
+  const JoinLobbyScreen({
+    super.key,
+    required this.playerName,
+    this.avatar = '🧠',
+  });
 
   @override
   State<JoinLobbyScreen> createState() => _JoinLobbyScreenState();
@@ -31,7 +37,7 @@ class _JoinLobbyScreenState extends State<JoinLobbyScreen> {
     }
     setState(() => _loading = true);
     final service = context.read<GameService>();
-    final ok = await service.joinLobby(ip, widget.playerName);
+    final ok = await service.joinLobby(ip, widget.playerName, avatar: widget.avatar);
     if (!mounted) return;
     setState(() => _loading = false);
     if (ok) {

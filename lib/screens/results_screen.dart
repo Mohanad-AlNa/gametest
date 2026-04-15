@@ -278,13 +278,20 @@ class _ResultsScreenState extends State<ResultsScreen>
                         color: isMe ? AppColors.accent.withOpacity(0.2) : Colors.white10,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        player.name,
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          color: isMe ? AppColors.accent : Colors.white70,
-                          fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(player.avatar, style: const TextStyle(fontSize: 14)),
+                          const SizedBox(width: 4),
+                          Text(
+                            player.name,
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              color: isMe ? AppColors.accent : Colors.white70,
+                              fontWeight: isMe ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }).toList(),
@@ -389,6 +396,8 @@ class _ResultsScreenState extends State<ResultsScreen>
             child: Text(rankDisplay, style: const TextStyle(fontSize: 20)),
           ),
           const SizedBox(width: 8),
+          Text(player.avatar, style: const TextStyle(fontSize: 20)),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               player.name,
@@ -473,6 +482,8 @@ class _ResultsScreenState extends State<ResultsScreen>
         children: [
           const Text('🏆', style: TextStyle(fontSize: 60)),
           const SizedBox(height: 8),
+          Text(winner.avatar, style: const TextStyle(fontSize: 40)),
+          const SizedBox(height: 4),
           Text(
             isMe ? '🎉 أنت الفائز! 🎉' : 'الفائز!',
             style: GoogleFonts.cairo(
@@ -531,7 +542,9 @@ class _ResultsScreenState extends State<ResultsScreen>
       child: Row(
         children: [
           Text(rankDisplay, style: TextStyle(fontSize: rank < 3 ? 28 : 20)),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
+          Text(player.avatar, style: const TextStyle(fontSize: 22)),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               player.name,

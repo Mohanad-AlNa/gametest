@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../main.dart';
 import '../services/game_service.dart';
 import 'game_screen.dart';
+import 'zombie_hub_screen.dart';
 
 class LobbyScreen extends StatelessWidget {
   const LobbyScreen({super.key});
@@ -14,8 +15,9 @@ class LobbyScreen extends StatelessWidget {
       textDirection: TextDirection.rtl,
       child: Consumer<GameService>(
         builder: (context, service, _) {
-          // Navigate to game when it starts
-          if (service.phase == GamePhase.playing || service.phase == GamePhase.countdown) {
+          // Navigate when game starts
+          if (service.phase == GamePhase.playing ||
+              service.phase == GamePhase.countdown) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (context.mounted) {
                 Navigator.pushReplacement(
@@ -30,6 +32,26 @@ class LobbyScreen extends StatelessWidget {
               }
             });
           }
+
+          if (service.phase == GamePhase.zombieRoleReveal ||
+              service.phase == GamePhase.zombieNightPhase ||
+              service.phase == GamePhase.zombieMorningReveal ||
+              service.phase == GamePhase.zombieGameOver) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  PageRouteBuilder(
+                    transitionDuration: const Duration(milliseconds: 500),
+                    pageBuilder: (_, __, ___) => const ZombieHubScreen(),
+                    transitionsBuilder: (_, anim, __, child) =>
+                        FadeTransition(opacity: anim, child: child),
+                  ),
+                );
+              }
+            });
+          }
+
           return Scaffold(
             backgroundColor: AppColors.background,
             appBar: AppBar(
@@ -51,7 +73,7 @@ class LobbyScreen extends StatelessWidget {
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  _buildWaitingAnimation(),
+                  _buildWaitingAnimation(service),
                   const SizedBox(height: 24),
                   _buildPlayersList(service),
                   const SizedBox(height: 24),
@@ -66,7 +88,8 @@ class LobbyScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildWaitingAnimation() {
+  Widget _buildWaitingAnimation(GameService service) {
+    final isZombie = service.gameMode == GameMode.zombie;
     return Center(
       child: Column(
         children: [
@@ -80,22 +103,46 @@ class LobbyScreen extends StatelessWidget {
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      AppColors.primary.withOpacity(0.3),
+                      (isZombie ? AppColors.zombieGreen : AppColors.primary).withOpacity(0.3),
                       Colors.transparent,
                     ],
                   ),
                 ),
               ),
-              const Text('🎮', style: TextStyle(fontSize: 56)),
+              Text(
+                isZombie ? '🧟' : '🎮',
+                style: const TextStyle(fontSize: 56),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Text(
             'صالة الانتظار',
             style: GoogleFonts.cairo(
               fontSize: 24,
               fontWeight: FontWeight.bold,
               color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: isZombie
+                  ? AppColors.zombieGreen.withOpacity(0.15)
+                  : AppColors.primary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isZombie ? AppColors.zombieGreen : AppColors.primary,
+              ),
+            ),
+            child: Text(
+              isZombie ? '🧟 وباء الزومبي' : '🧠 تخاطر',
+              style: GoogleFonts.cairo(
+                color: isZombie ? AppColors.zombieGreen : AppColors.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
             ),
           ),
         ],
@@ -141,6 +188,14 @@ class LobbyScreen extends StatelessWidget {
               ),
             ],
           ),
+          if (service.gameMode == GameMode.zombie && service.players.length < 3)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '⚠️ لعبة الزومبي تحتاج 3 لاعبين على الأقل',
+                style: GoogleFonts.cairo(color: AppColors.error, fontSize: 12),
+              ),
+            ),
           const SizedBox(height: 16),
           if (service.players.isEmpty)
             Center(
@@ -153,17 +208,16 @@ class LobbyScreen extends StatelessWidget {
               ),
             )
           else
-            ...service.players.asMap().entries.map(
-                  (entry) => _buildPlayerTile(entry.value, service.myId, entry.key),
-                ),
+            ...service.players.map(
+              (p) => _buildPlayerTile(p, service.myId),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildPlayerTile(PlayerInfo p, String myId, int index) {
+  Widget _buildPlayerTile(PlayerInfo p, String myId) {
     final isMe = p.id == myId;
-    final avatarEmojis = ['🦊', '🐼', '🦁', '🐸', '🦄', '🐯', '🦅', '🦋'];
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -185,10 +239,7 @@ class LobbyScreen extends StatelessWidget {
               color: AppColors.primary.withOpacity(0.2),
             ),
             child: Center(
-              child: Text(
-                avatarEmojis[index % avatarEmojis.length],
-                style: const TextStyle(fontSize: 24),
-              ),
+              child: Text(p.avatar, style: const TextStyle(fontSize: 26)),
             ),
           ),
           const SizedBox(width: 14),
@@ -236,7 +287,9 @@ class LobbyScreen extends StatelessWidget {
   }
 
   Widget _buildStartButton(BuildContext context, GameService service) {
-    final canStart = service.players.length >= 2;
+    final isZombie = service.gameMode == GameMode.zombie;
+    final minPlayers = isZombie ? 3 : 2;
+    final canStart = service.players.length >= minPlayers;
     return Column(
       children: [
         SizedBox(
@@ -247,11 +300,11 @@ class LobbyScreen extends StatelessWidget {
             label: Text(
               canStart
                   ? 'ابدأ اللعبة!'
-                  : 'في انتظار لاعبين (2 على الأقل)',
+                  : 'في انتظار لاعبين ($minPlayers على الأقل)',
               style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w900),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
+              backgroundColor: canStart ? AppColors.success : AppColors.surface,
               disabledBackgroundColor: AppColors.surface,
               disabledForegroundColor: AppColors.textSecondary,
               padding: const EdgeInsets.symmetric(vertical: 20),
