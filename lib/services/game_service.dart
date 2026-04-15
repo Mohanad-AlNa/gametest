@@ -400,8 +400,9 @@ class GameService extends ChangeNotifier {
       p.score = 0;
     }
 
+    const maxZombieCount = 3;
     final playerCount = _players.length;
-    final zombieCount = min((playerCount ~/ 3) + 1, 3);
+    final zombieCount = min((playerCount ~/ 3) + 1, maxZombieCount);
     final shuffled = List<PlayerInfo>.from(_players)..shuffle(Random());
     for (int i = 0; i < shuffled.length; i++) {
       _serverZombieRoles[shuffled[i].id] =
